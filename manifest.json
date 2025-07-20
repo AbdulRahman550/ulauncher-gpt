@@ -86,7 +86,7 @@
             "type": "input",
             "name": "Assistant Prompt",
             "description": "The system prompt to use for general assistant queries.",
-            "default_value": "You are a helpful assistant."
+            "default_value": "Provide a concise and straightforward answer. Keep the response short and suitable for a small display."
         },
         {
             "id": "temperature",
