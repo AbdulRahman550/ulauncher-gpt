@@ -47,12 +47,15 @@ class KeywordQueryEventListener(EventListener):
         logger.info('Processing user preferences')
         # Get user preferences
         try:
-            api_key = extension.preferences['api_key']
+            api_provider = extension.preferences['api_provider']
+            openai_api_key = extension.preferences['api_key']
+            gemini_api_key = extension.preferences['gemini_api_key']
             base_url = extension.preferences['base_url']
             max_tokens = int(extension.preferences['max_tokens'])
             frequency_penalty = float(
                 extension.preferences['frequency_penalty'])
-            presence_penalty = float(extension.preferences['presence_penalty'])
+            presence_penalty = float(
+                extension.preferences['presence_penalty'])
             temperature = float(extension.preferences['temperature'])
             top_p = float(extension.preferences['top_p'])
             system_prompt = extension.preferences['system_prompt']
@@ -80,23 +83,27 @@ class KeywordQueryEventListener(EventListener):
                                     on_enter=DoNothingAction())
             ])
 
-        # Create POST request
+        if api_provider == 'OpenAI':
+            return self.handle_openai_request(
+                search_term, openai_api_key, base_url, model, system_prompt,
+                temperature, max_tokens, top_p, frequency_penalty,
+                presence_penalty, line_wrap)
+        elif api_provider == 'Gemini':
+            return self.handle_gemini_request(
+                search_term, gemini_api_key, model, system_prompt,
+                temperature, max_tokens, top_p, frequency_penalty,
+                presence_penalty, line_wrap)
+
+    def handle_openai_request(self, search_term, api_key, base_url, model,
+                              system_prompt, temperature, max_tokens, top_p,
+                              frequency_penalty, presence_penalty, line_wrap):
         headers = {
             'content-type': 'application/json',
             'Authorization': 'Bearer ' + api_key
         }
-
         body = {
-            "messages": [
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": search_term
-                }
-            ],
+            "messages": [{"role": "system","content": system_prompt},
+                         {"role": "user", "content": search_term}],
             "temperature": temperature,
             "max_tokens": max_tokens,
             "top_p": top_p,
@@ -106,58 +113,85 @@ class KeywordQueryEventListener(EventListener):
         }
         body = json.dumps(body)
 
-        logger.info('Request body: %s', str(body))
-        logger.info('Request headers: %s', str(headers))
-
-        # Send POST request
         try:
-            logger.info('Sending request')
             response = requests.post(
                 f'{base_url}/chat/completions', headers=headers, data=body, timeout=10)
-        # pylint: disable=broad-except
-        except Exception as err:
+            response.raise_for_status()
+            response_json = response.json()
+            choices = response_json['choices']
+            items = []
+            for choice in choices:
+                message = choice['message']['content']
+                message = wrap_text(message, line_wrap)
+                items.append(ExtensionResultItem(icon=EXTENSION_ICON, name="Assistant", description=message,
+                                                 on_enter=CopyToClipboardAction(message)))
+            return RenderResultListAction(items)
+        except requests.exceptions.RequestException as err:
             logger.error('Request failed: %s', str(err))
             return RenderResultListAction([
                 ExtensionResultItem(icon=EXTENSION_ICON,
                                     name='Request failed: ' + str(err),
                                     on_enter=CopyToClipboardAction(str(err)))
             ])
-
-        logger.info('Request succeeded')
-        logger.info('Response: %s', str(response))
-
-        # Get response
-        # Choice schema
-        #  { message: Message, finish_reason: string, index: number }
-        # Message schema
-        #  { role: string, content: string }
-        try:
-            response = response.json()
-            choices = response['choices']
-        # pylint: disable=broad-except
         except Exception as err:
-            logger.error('Failed to parse response: %s', str(response))
-            errMsg = "Unknown error, please check logs for more info"
-            try:
-                errMsg = response['error']['message']
-            except Exception:
-                pass
-
+            logger.error('Failed to parse response: %s', str(err))
             return RenderResultListAction([
                 ExtensionResultItem(icon=EXTENSION_ICON,
-                                    name='Failed to parse response: ' +
-                                    errMsg,
-                                    on_enter=CopyToClipboardAction(str(errMsg)))
+                                    name='Failed to parse response: ' + str(err),
+                                    on_enter=CopyToClipboardAction(str(err)))
             ])
 
-        items: list[ExtensionResultItem] = []
-        try:
-            for choice in choices:
-                message = choice['message']['content']
-                message = wrap_text(message, line_wrap)
+    def handle_gemini_request(self, search_term, api_key, model, system_prompt,
+                              temperature, max_tokens, top_p,
+                              frequency_penalty, presence_penalty, line_wrap):
+        headers = {
+            'content-type': 'application/json',
+            'x-goog-api-key': api_key
+        }
+        body = {
+            "contents": [
+                {
+                    "parts": [
+                        {"text": system_prompt},
+                        {"text": search_term}
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "temperature": temperature,
+                "maxOutputTokens": max_tokens,
+                "topP": top_p,
+            }
+        }
+        body = json.dumps(body)
 
+        try:
+            response = requests.post(
+                f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
+                headers=headers, data=body, timeout=10)
+            response.raise_for_status()
+            response_json = response.json()
+            items = []
+            for candidate in response_json['candidates']:
+                message = candidate['content']['parts'][0]['text']
+                message = wrap_text(message, line_wrap)
                 items.append(ExtensionResultItem(icon=EXTENSION_ICON, name="Assistant", description=message,
                                                  on_enter=CopyToClipboardAction(message)))
+            return RenderResultListAction(items)
+        except requests.exceptions.RequestException as err:
+            logger.error('Request failed: %s', str(err))
+            return RenderResultListAction([
+                ExtensionResultItem(icon=EXTENSION_ICON,
+                                    name='Request failed: ' + str(err),
+                                    on_enter=CopyToClipboardAction(str(err)))
+            ])
+        except Exception as err:
+            logger.error('Failed to parse response: %s', str(err))
+            return RenderResultListAction([
+                ExtensionResultItem(icon=EXTENSION_ICON,
+                                    name='Failed to parse response: ' + str(err),
+                                    on_enter=CopyToClipboardAction(str(err)))
+            ])
         # pylint: disable=broad-except
         except Exception as err:
             logger.error('Failed to parse response: %s', str(response))

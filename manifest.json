@@ -15,10 +15,28 @@
             "default_value": "gpt"
         },
         {
+            "id": "api_provider",
+            "type": "select",
+            "name": "API Provider",
+            "description": "Select the API provider to use",
+            "options": [
+                "OpenAI",
+                "Gemini"
+            ],
+            "default_value": "OpenAI"
+        },
+        {
             "id": "api_key",
             "type": "input",
             "name": "OpenAI API Key",
             "description": "You can get one at https://platform.openai.com/account/api-keys",
+            "default_value": ""
+        },
+        {
+            "id": "gemini_api_key",
+            "type": "input",
+            "name": "Gemini API Key",
+            "description": "You can get one at https://aistudio.google.com/apikey",
             "default_value": ""
         },
         {
