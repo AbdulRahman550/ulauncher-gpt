@@ -52,15 +52,12 @@ class KeywordQueryEventListener(EventListener):
             gemini_api_key = extension.preferences['gemini_api_key']
             base_url = extension.preferences['base_url']
             max_tokens = int(extension.preferences['max_tokens'])
-            frequency_penalty = float(
-                extension.preferences['frequency_penalty'])
-            presence_penalty = float(
-                extension.preferences['presence_penalty'])
             temperature = float(extension.preferences['temperature'])
             top_p = float(extension.preferences['top_p'])
             system_prompt = extension.preferences['system_prompt']
             line_wrap = int(extension.preferences['line_wrap'])
-            model = extension.preferences['model']
+            openai_model = extension.preferences['openai_model']
+            gemini_model = extension.preferences['gemini_model']
         # pylint: disable=broad-except
         except Exception as err:
             logger.error('Failed to parse preferences: %s', str(err))
@@ -85,30 +82,26 @@ class KeywordQueryEventListener(EventListener):
 
         if api_provider == 'OpenAI':
             return self.handle_openai_request(
-                search_term, openai_api_key, base_url, model, system_prompt,
-                temperature, max_tokens, top_p, frequency_penalty,
-                presence_penalty, line_wrap)
+                search_term, openai_api_key, base_url, openai_model,
+                system_prompt, temperature, max_tokens, top_p, line_wrap)
         elif api_provider == 'Gemini':
             return self.handle_gemini_request(
-                search_term, gemini_api_key, model, system_prompt,
-                temperature, max_tokens, top_p, frequency_penalty,
-                presence_penalty, line_wrap)
+                search_term, gemini_api_key, gemini_model, system_prompt,
+                temperature, max_tokens, top_p, line_wrap)
 
     def handle_openai_request(self, search_term, api_key, base_url, model,
                               system_prompt, temperature, max_tokens, top_p,
-                              frequency_penalty, presence_penalty, line_wrap):
+                              line_wrap):
         headers = {
             'content-type': 'application/json',
             'Authorization': 'Bearer ' + api_key
         }
         body = {
-            "messages": [{"role": "system","content": system_prompt},
+            "messages": [{"role": "system", "content": system_prompt},
                          {"role": "user", "content": search_term}],
             "temperature": temperature,
             "max_tokens": max_tokens,
             "top_p": top_p,
-            "frequency_penalty": frequency_penalty,
-            "presence_penalty": presence_penalty,
             "model": model,
         }
         body = json.dumps(body)
@@ -118,10 +111,10 @@ class KeywordQueryEventListener(EventListener):
                 f'{base_url}/chat/completions', headers=headers, data=body, timeout=10)
             response.raise_for_status()
             response_json = response.json()
-            choices = response_json['choices']
+            choices = response_json.get('choices', [])
             items = []
             for choice in choices:
-                message = choice['message']['content']
+                message = choice.get('message', {}).get('content', '')
                 message = wrap_text(message, line_wrap)
                 items.append(ExtensionResultItem(icon=EXTENSION_ICON, name="Assistant", description=message,
                                                  on_enter=CopyToClipboardAction(message)))
@@ -142,18 +135,16 @@ class KeywordQueryEventListener(EventListener):
             ])
 
     def handle_gemini_request(self, search_term, api_key, model, system_prompt,
-                              temperature, max_tokens, top_p,
-                              frequency_penalty, presence_penalty, line_wrap):
+                              temperature, max_tokens, top_p, line_wrap):
         headers = {
-            'content-type': 'application/json',
-            'x-goog-api-key': api_key
+            'Content-Type': 'application/json',
         }
+        full_prompt = f"{system_prompt}\n\n{search_term}"
         body = {
             "contents": [
                 {
                     "parts": [
-                        {"text": system_prompt},
-                        {"text": search_term}
+                        {"text": full_prompt}
                     ]
                 }
             ],
@@ -164,19 +155,30 @@ class KeywordQueryEventListener(EventListener):
             }
         }
         body = json.dumps(body)
+        url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}'
 
         try:
-            response = requests.post(
-                f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
-                headers=headers, data=body, timeout=10)
+            response = requests.post(url, headers=headers, data=body, timeout=10)
             response.raise_for_status()
             response_json = response.json()
             items = []
-            for candidate in response_json['candidates']:
-                message = candidate['content']['parts'][0]['text']
-                message = wrap_text(message, line_wrap)
-                items.append(ExtensionResultItem(icon=EXTENSION_ICON, name="Assistant", description=message,
-                                                 on_enter=CopyToClipboardAction(message)))
+            candidates = response_json.get('candidates', [])
+            if not candidates:
+                return RenderResultListAction([
+                    ExtensionResultItem(icon=EXTENSION_ICON,
+                                        name="No response from Gemini",
+                                        description="The response was empty or blocked.",
+                                        on_enter=DoNothingAction())
+                ])
+
+            for candidate in candidates:
+                content = candidate.get('content', {})
+                parts = content.get('parts', [])
+                if parts:
+                    message = parts[0].get('text', '')
+                    message = wrap_text(message, line_wrap)
+                    items.append(ExtensionResultItem(icon=EXTENSION_ICON, name="Assistant", description=message,
+                                                     on_enter=CopyToClipboardAction(message)))
             return RenderResultListAction(items)
         except requests.exceptions.RequestException as err:
             logger.error('Request failed: %s', str(err))
@@ -186,7 +188,7 @@ class KeywordQueryEventListener(EventListener):
                                     on_enter=CopyToClipboardAction(str(err)))
             ])
         except Exception as err:
-            logger.error('Failed to parse response: %s', str(err))
+            logger.error('Failed to parse response: %s', str(err), exc_info=True)
             return RenderResultListAction([
                 ExtensionResultItem(icon=EXTENSION_ICON,
                                     name='Failed to parse response: ' + str(err),

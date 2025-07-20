@@ -16,6 +16,8 @@ This extension supports both OpenAI and Gemini APIs. You can select your preferr
 -   **OpenAI API Key**: Your API key for the OpenAI API.
 -   **Gemini API Key**: Your API key for the Gemini API.
 -   **OpenAI API Base URL**: The base URL for the OpenAI API. Defaults to `https://api.openai.com/v1`.
+-   **OpenAI Model**: The model to use for OpenAI (e.g., `gpt-3.5-turbo`).
+-   **Gemini Model**: The model to use for Gemini (e.g., `gemini-1.5-flash`).
 
 ## Install
 
