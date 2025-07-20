@@ -44,12 +44,11 @@ class KeywordQueryEventListener(EventListener):
     """
 
     def on_event(self, event, extension):
-        endpoint = "https://api.openai.com/v1/chat/completions"
-
         logger.info('Processing user preferences')
         # Get user preferences
         try:
             api_key = extension.preferences['api_key']
+            base_url = extension.preferences['base_url']
             max_tokens = int(extension.preferences['max_tokens'])
             frequency_penalty = float(
                 extension.preferences['frequency_penalty'])
@@ -114,7 +113,7 @@ class KeywordQueryEventListener(EventListener):
         try:
             logger.info('Sending request')
             response = requests.post(
-                endpoint, headers=headers, data=body, timeout=10)
+                f'{base_url}/chat/completions', headers=headers, data=body, timeout=10)
         # pylint: disable=broad-except
         except Exception as err:
             logger.error('Request failed: %s', str(err))
