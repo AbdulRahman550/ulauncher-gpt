@@ -68,11 +68,25 @@
             "default_value": "64"
         },
         {
-            "id": "system_prompt",
+            "id": "terminal_prefix",
             "type": "input",
-            "name": "System Prompt",
-            "description": "A prompt to give some context to the system. This is optional but highly recommended.",
+            "name": "Terminal Prefix",
+            "description": "The prefix to trigger the terminal prompt.",
+            "default_value": "@"
+        },
+        {
+            "id": "terminal_prompt",
+            "type": "input",
+            "name": "Terminal Prompt",
+            "description": "The system prompt to use for terminal commands.",
             "default_value": "Convert natural language instructions into Linux commands. You have been programmed to understand a wide set of commands Linux related commands. You should only answer with the best and most relevant linux command, no descriptions or context, just return the command, do not use 'new lines'"
+        },
+        {
+            "id": "assistant_prompt",
+            "type": "input",
+            "name": "Assistant Prompt",
+            "description": "The system prompt to use for general assistant queries.",
+            "default_value": "You are a helpful assistant."
         },
         {
             "id": "temperature",

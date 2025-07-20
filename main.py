@@ -54,7 +54,9 @@ class KeywordQueryEventListener(EventListener):
             max_tokens = int(extension.preferences['max_tokens'])
             temperature = float(extension.preferences['temperature'])
             top_p = float(extension.preferences['top_p'])
-            system_prompt = extension.preferences['system_prompt']
+            terminal_prefix = extension.preferences['terminal_prefix']
+            terminal_prompt = extension.preferences['terminal_prompt']
+            assistant_prompt = extension.preferences['assistant_prompt']
             line_wrap = int(extension.preferences['line_wrap'])
             openai_model = extension.preferences['openai_model']
             gemini_model = extension.preferences['gemini_model']
@@ -79,6 +81,11 @@ class KeywordQueryEventListener(EventListener):
                                     name='Type in a prompt...',
                                     on_enter=DoNothingAction())
             ])
+
+        system_prompt = assistant_prompt
+        if search_term.startswith(terminal_prefix):
+            system_prompt = terminal_prompt
+            search_term = search_term[len(terminal_prefix):].lstrip()
 
         if api_provider == 'OpenAI':
             return self.handle_openai_request(
